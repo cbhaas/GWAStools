@@ -1,0 +1,27 @@
+# Function to filter GWAS results to lead snps within signals
+
+getleadsnps <- function(gwas, chr="seqnames", start="start", end="end", width=500000, leadsnps=NA){
+  # Create leadsnps GRanges object for first pass thru
+  if(is.na(leadsnps)) {leadsnps <- GRanges()}
+  # Convert gwas data.frame to GRanges object
+  tmp <- gwas %>% filter(-log10(P)>8) %>% 
+    makeGRangesFromDataFrame(keep.extra.columns=T, ignore.strand=T, seqnames.field=chr, start.field=start, end.field=end) %>%
+    flank(width=(width/2), both=TRUE)
+  
+  # Remove leadsnps GRanges from gwas GRanges and convert back to data.frame
+  tmp <- tmp[!tmp %over% leadsnps] %>% as.data.frame() %>% select(-width, -strand)
+  
+  if(dim(tmp)[1]==0){
+    return(leadsnps %>% as.data.frame())
+  }
+  else{
+    # Filter to SNP with smallest p-value and add to leadsnps GRanges objects
+    leadsnps <- tmp %>% filter(P==min(P)) %>%
+      makeGRangesFromDataFrame(keep.extra.columns=T, ignore.strand=T, seqnames.field="seqnames", start.field="start", end.field="end") %>%
+      flank(width=(width/2), both=TRUE) %>% 
+      c(., leadsnps)
+    
+    # Rerun function on subset gwas data.frame object
+    return(getleadsnps(gwas, chr=chr, start=start, end=end, width=width, leadsnps = leadsnps))
+  }
+}    
